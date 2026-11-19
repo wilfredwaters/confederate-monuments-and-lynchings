@@ -5,8 +5,12 @@ Inputs (in data/, git-ignored):
       https://docs.google.com/spreadsheets/d/1W4H2qa2THM1ni53QYZftGob_k_Bf9HreFAtCERfjCIU/export?format=xlsx
   seguin_rigby_2019.csv      Seguin & Rigby (2019) national lynching data,
       38 states outside the Tolnay-Beck South, https://osf.io/kr8yc
-  tolnay_beck.csv            optional; Tolnay-Beck inventory (10 Southern
-      states), requested via the contact form at https://sites.uw.edu/lynching/
+  tolnay_beck.csv            optional; full Tolnay-Beck inventory (10
+      Southern states), requested via https://sites.uw.edu/lynching/
+  duslr_subset.csv           stand-in until then: Tolnay-Beck rows from
+      Matthew Kollmer's DUSLR (github.com/MatthewKollmer/DUSLR,
+      subset_cleaned_combined_lynch_inventories.csv): named Black and
+      white victims, 1865-1921, geocoded to town. No license stated.
   2023_Gaz_counties_national.txt   Census county centroids, from
       https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2023_Gazetteer/
 
@@ -31,11 +35,20 @@ DATA = 'data'
 SPLC = os.path.join(DATA, 'splc_whose_heritage.xlsx')
 SR = os.path.join(DATA, 'seguin_rigby_2019.csv')
 TB = os.path.join(DATA, 'tolnay_beck.csv')
+DUSLR = os.path.join(DATA, 'duslr_subset.csv')
 GAZ = os.path.join(DATA, '2023_Gaz_counties_national.txt')
 
 # Offset victims up to this far from the county centroid (km), so cases
 # in one county don't stack on one dot.
 SPREAD_KM = 12
+
+# Town-geocoded victims (DUSLR) get a small offset so cases in one town
+# stay apart.
+TOWN_KM = 2
+
+STATE_ABBR = {'alabama': 'AL', 'arkansas': 'AR', 'florida': 'FL', 'georgia': 'GA',
+              'kentucky': 'KY', 'louisiana': 'LA', 'mississippi': 'MS',
+              'north carolina': 'NC', 'south carolina': 'SC', 'tennessee': 'TN'}
 
 # Counties the sources spell differently or that no longer exist, mapped
 # to today's county or city. CT dropped counties in 2022; its old county
@@ -103,11 +116,11 @@ def centroids():
     return res
 
 
-def jitter(key, lat, lon):
-    """Fixed pseudo-random offset within SPREAD_KM, seeded by the case id."""
+def jitter(key, lat, lon, km=SPREAD_KM):
+    """Fixed pseudo-random offset within km, seeded by the case id."""
     h = hashlib.sha1(key.encode()).digest()
     a = h[0] / 255 * 2 * math.pi
-    r = math.sqrt(h[1] / 255) * SPREAD_KM
+    r = math.sqrt(h[1] / 255) * km
     dlat = r * math.sin(a) / 110.57
     dlon = r * math.cos(a) / (111.32 * math.cos(math.radians(lat)))
     return round(lat + dlat, 4), round(lon + dlon, 4)
@@ -150,14 +163,98 @@ def tolnay_beck(cent, missing):
     sys.exit('tolnay_beck.csv found: map its columns in tolnay_beck() first')
 
 
+def month_day(s):
+    """Month and day from '1890-07-20' or '7/20/90'; 0 when unknown.
+    DUSLR sets unknown days to the 1st, so day 1 is treated as unknown."""
+    if '-' in s:
+        _, m, d = (s + '--').split('-')[:3]
+    elif '/' in s:
+        m, d = s.split('/')[:2]
+    else:
+        return 0, 0
+    m, d = int(m or 0), int(d or 0)
+    return m, (0 if d == 1 else d)
+
+
+def county_index(path):
+    """{(state, 'chatham county'): GEOID} from the Gazetteer."""
+    res = {}
+    with open(path, encoding='utf-8') as f:
+        for r in csv.DictReader(f, delimiter='\t'):
+            r = {k.strip(): v.strip() for k, v in r.items()}
+            res[(r['USPS'], r['NAME'].lower())] = r['GEOID']
+    return res
+
+
+def duslr(cent, missing):
+    """DUSLR's Tolnay-Beck rows in the 10 core states only (Seguin-Rigby
+    covers the rest, so this avoids counting a victim twice)."""
+    if not os.path.exists(DUSLR):
+        return []
+    counties = county_index(GAZ)
+    box = state_boxes(counties, cent)
+    out, moved = [], 0
+    with open(DUSLR, encoding='utf-8', errors='replace') as f:
+        for i, r in enumerate(csv.DictReader(f)):
+            if r['source'] != 'tolnay-beck':
+                continue
+            parts = [p.strip() for p in r['lynch_location'].split(',')]
+            st = STATE_ABBR.get(parts[-1])
+            if st is None:
+                continue
+
+            county = parts[-2].title() if len(parts) > 1 else ''
+            m, d = month_day(r['lynch_date'])
+            key = 'D%d' % i
+            pt = (float(r['latitude']), float(r['longitude'])) if r['latitude'] else None
+            if pt and not inside(box[st], pt):
+                moved += 1
+                pt = None
+            if pt:
+                lat, lon = jitter(key, pt[0], pt[1], TOWN_KM)
+            else:
+                g = counties.get((st, county.lower()))
+                if g is None:
+                    missing.append(('D', st, county, ''))
+                    continue
+                lat, lon = jitter(key, *cent[g])
+
+            # DUSLR sets unknown days to the 1st; keep year and month only then.
+            out.append([lat, lon, year(r['year']), m, d,
+                        r['victim_name'].title(), r['victim_race'].title(), '', '',
+                        county.replace(' County', '').replace(' Parish', ''), st,
+                        parts[0].title() if len(parts) > 2 else '', 'T'])
+    print('DUSLR: %d town points outside their state, moved to county centroid' % moved)
+    return out
+
+
+# Slack around a state's county centroids, in degrees: a town point
+# outside this box was geocoded to the wrong place.
+BOX_PAD = 0.6
+
+
+def state_boxes(counties, cent):
+    box = {}
+    for (st, _), g in counties.items():
+        lat, lon = cent[g]
+        b = box.setdefault(st, [lat, lon, lat, lon])
+        box[st] = [min(b[0], lat), min(b[1], lon), max(b[2], lat), max(b[3], lon)]
+    return {k: [b[0] - BOX_PAD, b[1] - BOX_PAD, b[2] + BOX_PAD, b[3] + BOX_PAD] for k, b in box.items()}
+
+
+def inside(b, pt):
+    return b[0] <= pt[0] <= b[2] and b[1] <= pt[1] <= b[3]
+
+
 def main():
     mon = symbols()
     cent = centroids()
     missing = []
-    lyn = seguin_rigby(cent, missing) + tolnay_beck(cent, missing)
+    lyn = seguin_rigby(cent, missing) + (tolnay_beck(cent, missing) or duslr(cent, missing))
 
     meta = {'mon': len(mon), 'lyn': len(lyn),
-            'tb': os.path.exists(TB), 'tbStates': TB_STATES,
+            'tb': 'full' if os.path.exists(TB) else 'duslr' if os.path.exists(DUSLR) else '',
+            'tbStates': TB_STATES,
             'unplaced': len(missing)}
     sep = (',', ':')
     with open('data.js', 'w') as out:

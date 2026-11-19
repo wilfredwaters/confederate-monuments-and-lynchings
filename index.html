@@ -96,7 +96,7 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
   <ul>
     <li>Everything up to the chosen year is shown. The last 10 years are bright; older items fade.</li>
     <li>A hollow gray triangle is a monument that has since been removed (hollow from its removal year).</li>
-    <li>Victims are placed near the center of their county, a few miles apart, because the records give the county, not the exact spot.</li>
+    <li>Outside the 10 Tolnay&ndash;Beck states, victims are placed near the center of their county, a few miles apart, because the records give the county, not the exact spot. Inside them, DUSLR locates most victims to the town.</li>
     <li>Click any mark for details. Accusations are those reported at the time; most were never tested in court.</li>
   </ul>
 
@@ -137,7 +137,7 @@ var M = {lat:0, lon:1, year:2, type:3, status:4, name:5, honor:6, city:7, state:
 var V = {lat:0, lon:1, year:2, month:3, day:4, name:5, race:6, alleged:7, method:8, county:9, state:10, city:11, src:12};
 var TYPE = {M:'Monument', R:'Roadway', S:'School', B:'Building', C:'County or city', O:'Other'};
 var STATUS = {L:'Still standing', N:'Renamed', X:'Removed', V:'Relocated', P:'Removal pending', D:'Statue removed, pedestal remains', R:'Reconciliation'};
-var SRC = {S:'Seguin & Rigby (2019)', T:'Tolnay–Beck inventory'};
+var SRC = {S:'Seguin & Rigby (2019)', T:'Tolnay\u2013Beck\u2013Bailey inventory, via DUSLR (Kollmer)'};
 var MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 function getVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#2f2f37'; }
@@ -369,12 +369,19 @@ $('about').onclick = function(e){ if(e.target === this){ this.style.display = 'n
 
 $('undated').textContent = (MON.length - mon.length).toLocaleString()+' of '+MON.length.toLocaleString();
 $('unplaced').textContent = META.unplaced;
+// Southern data: none, a named-victims subset (DUSLR), or the full file.
+var w = $('warn');
 if(!META.tb){
-  var w = $('warn');
   w.hidden = false;
   w.innerHTML = '<b>Incomplete:</b> lynchings in '+META.tbStates.join(', ')
-    + ' (the Tolnay–Beck states) are not loaded yet. The Deep South will look empty. Do not read the map until they are added.';
+    + ' (the Tolnay\u2013Beck states) are not loaded yet. The Deep South will look empty. Do not read the map until they are added.';
   $('tbNote').textContent = '(not yet loaded)';
+}
+if(META.tb === 'duslr'){
+  w.hidden = false;
+  w.innerHTML = '<b>Undercount in the South:</b> for '+META.tbStates.join(', ')
+    + ' only named Black and white victims from 1865 to 1921 are shown. Unnamed victims, other victims and 1922\u20131930 are missing there.';
+  $('tbNote').innerHTML = 'Shown here through the <a href="https://github.com/MatthewKollmer/DUSLR" target="_blank" rel="noopener">DUSLR</a> subset compiled by Matthew Kollmer (Virality of Racial Terror project): named Black and white victims, 1865&ndash;1921, located to the town.';
 }
 
 drawChart();
