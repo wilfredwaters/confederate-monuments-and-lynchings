@@ -10,7 +10,7 @@
 <style>
 :root{
   --bg:#fff; --fg:#1d1d1f; --muted:#5f6368; --line:#d0d0d0; --panel:rgba(255,255,255,.96);
-  --lyn:#b2182b; --mon:#2f2f37; --accent:#1d1d1f; --warn:#fff4d6; --warn-line:#e0b84f;
+  --lyn:#e41a1c; --mon:#111; --accent:#1d1d1f; --warn:#fff4d6; --warn-line:#e0b84f;
 }
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,"Segoe UI",Arial,sans-serif}
 #map{position:absolute;top:0;left:0;right:0;bottom:190px}
@@ -25,7 +25,7 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
 #title h1{font:700 17px/1.2 Georgia,serif;margin:0 0 4px}
 #title .k{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:4px 0}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--lyn);margin-right:4px;vertical-align:middle}
-.tri{display:inline-block;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid var(--mon);margin-right:4px;vertical-align:middle}
+.tri{display:inline-block;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid var(--mon);filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff);margin-right:4px;vertical-align:middle}
 .hol{display:inline-block;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #aaa;margin-right:4px;vertical-align:middle}
 #filters{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 #warn{position:absolute;top:10px;right:10px;z-index:500;max-width:300px;background:var(--warn);border:1px solid var(--warn-line);border-radius:8px;padding:8px 10px;font-size:12px}
@@ -83,13 +83,13 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
     <input id="slider" type="range" min="1865" max="2024" value="1890" aria-label="Year">
     <span id="count"></span>
   </div>
-  <svg id="chart" role="img" aria-label="Lynchings and monument dedications per year"></svg>
+  <svg id="chart" role="img" aria-label="Monument dedications (above) and lynchings (below) per year"></svg>
 </div>
 
 <div id="about" role="dialog" aria-modal="true"><div class="box">
   <h2>About this map</h2>
   <p><b>Content warning:</b> this map records racial terror killings.</p>
-  <p>It places two things on one timeline: where lynching victims were killed, and where Confederate monuments went up. Drag the slider or press Play. The chart below the map counts both, year by year.</p>
+  <p>It places two things on one timeline: where lynching victims were killed, and where Confederate monuments went up. Drag the slider or press Play. The chart below the map counts both, year by year: monuments above the line, lynchings below.</p>
 
   <h3>What the research says</h3>
   <p>Henderson and colleagues (2021, <i>PNAS</i>) compared counties in 11 Southern states. Counties with more lynchings had more Confederate monuments, even after accounting for population and other differences. The authors state the link is <b>correlational</b>: it does not show that monuments caused lynchings, or the reverse. Both may stem from the same local commitment to white supremacy.</p>
@@ -127,13 +127,16 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
 //
 //   map  <-- year -->  slider / Play / chart click
 //    |                     |
-//   markers styled by     chart: lynchings per year (up),
-//   age relative to year   dedications per year (down)
+//   markers styled by     chart: dedications per year (up),
+//   age relative to year   lynchings per year (down)
 (function(){
 var YEAR_MIN = 1865, YEAR_MAX = 2024, START = 1890;
 var BRIGHT = 10;          // years an item stays bright
 var PLAY_MS = 220;        // per year while playing
-var COL = {lyn:'#b2182b', mon:getVar('--mon'), gone:'#9a9a9a'};
+// Map marks stay the same in dark mode (the base map is always light);
+// chart bars follow the theme. Bright red vs near-black: far apart in
+// both hue and lightness.
+var COL = {lyn:'#e41a1c', mon:'#111', gone:'#8a8a8a', monBar:getVar('--mon')};
 
 // data.js row layouts (see tools/build.py).
 var M = {lat:0, lon:1, year:2, type:3, status:4, name:5, honor:6, city:7, state:8, sponsor:9, removed:10};
@@ -152,7 +155,10 @@ function $(id){ return document.getElementById(id); }
 var map = L.map('map', {preferCanvas:true, minZoom:3}).setView([34.5, -88], 5);
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom:16,
   attribution:'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'}).addTo(map);
-var canvas = L.canvas({padding:0.3});
+// Separate panes and canvases so monuments always draw above victims.
+map.createPane('lyn').style.zIndex = 410;
+map.createPane('mon').style.zIndex = 420;
+var lynCanvas = L.canvas({padding:0.3, pane:'lyn'}), monCanvas = L.canvas({padding:0.3, pane:'mon'});
 
 // State outlines under the marks, names above them; neither takes the
 // mouse. Abbreviations when zoomed out, full names from STATE_FULL_ZOOM.
@@ -218,21 +224,21 @@ function raceKey(r){
 }
 
 var lyn = LYN.map(function(d){
-  var l = L.circleMarker([d[V.lat], d[V.lon]], {renderer:canvas, radius:4, weight:0.6, color:'#fff', fillColor:COL.lyn});
+  var l = L.circleMarker([d[V.lat], d[V.lon]], {renderer:lynCanvas, pane:'lyn', radius:4, weight:0.6, color:'#fff', fillColor:COL.lyn});
   l.bindPopup(function(){ return lynHtml(d); }, {maxWidth:280});
   return {d:d, y:d[V.year], race:raceKey(d[V.race]), layer:l, state:''};
 });
 
 var mon = MON.filter(function(d){ return d[M.year]; }).map(function(d){
-  var l = new Triangle([d[M.lat], d[M.lon]], {renderer:canvas, radius:5, weight:0.8, color:'#fff', fillColor:COL.mon});
+  var l = new Triangle([d[M.lat], d[M.lon]], {renderer:monCanvas, pane:'mon', radius:6, weight:2.6, color:'#fff', fillColor:COL.mon});
   l.bindPopup(function(){ return monHtml(d); }, {maxWidth:280});
   return {d:d, y:d[M.year], gone:d[M.removed], type:d[M.type], layer:l, state:''};
 });
 
 var STYLE = {
   lyn:{'new':{fillOpacity:0.9, opacity:0.9}, old:{fillOpacity:0.28, opacity:0.3}},
-  mon:{'new':{fillOpacity:0.95, opacity:1, color:'#fff', weight:0.8}, old:{fillOpacity:0.45, opacity:0.6, color:'#fff', weight:0.8},
-       gone:{fillOpacity:0, opacity:1, color:COL.gone, weight:1.6}}
+  mon:{'new':{fillOpacity:1, opacity:1, color:'#fff', weight:2.6}, old:{fillOpacity:0.6, opacity:0.8, color:'#fff', weight:2.6},
+       gone:{fillOpacity:0, opacity:1, color:COL.gone, weight:1.8}}
 };
 
 var filt = {sym:'M', race:'all', mode:'cum'};
@@ -305,7 +311,7 @@ $('play').onclick = play;
 $('slider').oninput = function(){ stop(); setYear(+this.value); };
 
 // --- Chart ----------------------------------------------------------
-// Mirrored bars on one time axis: lynchings above, dedications below.
+// Mirrored bars on one time axis: dedications above, lynchings below.
 // Each half has its own scale, labeled, since counts differ ~4x.
 
 var svg = $('chart'), NS = 'http://www.w3.org/2000/svg';
@@ -339,8 +345,8 @@ function drawChart(){
 
   for(var Y = YEAR_MIN; Y <= YEAR_MAX; Y++){
     var x = xOf(Y, w);
-    if(a[Y]){ el('rect', {x:x, y:mid - a[Y] / maxA * half, width:bw, height:a[Y] / maxA * half, fill:COL.lyn}); }
-    if(b[Y]){ el('rect', {x:x, y:mid + 1, width:bw, height:b[Y] / maxB * half, fill:COL.mon}); }
+    if(b[Y]){ el('rect', {x:x, y:mid - b[Y] / maxB * half, width:bw, height:b[Y] / maxB * half, fill:COL.monBar}); }
+    if(a[Y]){ el('rect', {x:x, y:mid + 1, width:bw, height:a[Y] / maxA * half, fill:COL.lyn}); }
   }
 
   // Axis, decade ticks, scale labels.
@@ -350,8 +356,8 @@ function drawChart(){
     var t = el('text', {x:xOf(D, w), y:h - 2, 'font-size':10, fill:fg, 'text-anchor':'middle'});
     t.textContent = D % 50 === 0 || w > 700 ? D : '';
   }
-  lab(4, PAD.t + 8, 'Lynched', COL.lyn); lab(4, PAD.t + 19, 'max '+maxA+'/yr', fg);
-  lab(4, h - PAD.b - 12, 'Dedicated', COL.mon); lab(4, h - PAD.b - 1, 'max '+maxB+'/yr', fg);
+  lab(4, PAD.t + 8, 'Dedicated', COL.monBar); lab(4, PAD.t + 19, 'max '+maxB+'/yr', fg);
+  lab(4, h - PAD.b - 12, 'Lynched', COL.lyn); lab(4, h - PAD.b - 1, 'max '+maxA+'/yr', fg);
 
   cur = el('line', {y1:PAD.t - 4, y2:h - PAD.b, stroke:getVar('--fg'), 'stroke-width':1.5});
   cursor();
