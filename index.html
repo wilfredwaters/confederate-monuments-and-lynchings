@@ -252,13 +252,17 @@ var STYLE = {
 var filt = {sym:'M', race:'all', mode:'cum', lyn:true, mon:true, gone:true};
 
 function lynShown(it){ return filt.lyn && (filt.race === 'all' || it.race === filt.race); }
-function monShown(it){ return filt.mon && (filt.sym === 'all' || it.type === 'M'); }
+// Symbol-type filter only. The legend's Monuments and Removed switches act
+// in stateAt: Monuments covers standing ones, Removed covers removed ones.
+function monShown(it){ return filt.sym === 'all' || it.type === 'M'; }
+function dedShown(it){ return filt.mon && monShown(it); }
 
 // State of one item at year Y: hidden before it happens; bright for
 // BRIGHT years; faded after (or hidden, in window mode); gray once removed.
 function stateAt(it, Y, kind){
   if(it.y > Y){ return ''; }
   if(kind === 'mon' && it.gone && it.gone <= Y){ return filt.gone ? 'gone' : ''; }
+  if(kind === 'mon' && !filt.mon){ return ''; }
   if(Y - it.y < BRIGHT){ return 'new'; }
   return filt.mode === 'win' ? '' : 'old';
 }
@@ -296,7 +300,7 @@ function setYear(Y){
   apply(lyn, lynGroup, 'lyn', lynShown, year);
   apply(mon, monGroup, 'mon', monShown, year);
   $('count').textContent = 'By '+year+': '+cumCount(lyn, lynShown, year).toLocaleString()+' lynching victims recorded · '
-    + cumCount(mon, monShown, year).toLocaleString()+' '+(filt.sym === 'M' ? 'monuments' : 'symbols')+' dedicated'
+    + cumCount(mon, dedShown, year).toLocaleString()+' '+(filt.sym === 'M' ? 'monuments' : 'symbols')+' dedicated'
     + (filt.gone ? ' \u00b7 '+goneCount(year).toLocaleString()+' removed' : '');
   cursor();
 }
@@ -361,7 +365,7 @@ function drawChart(){
   svg.innerHTML = '';
   var w = svg.clientWidth || 800, h = svg.clientHeight || 120;
   var mid = PAD.t + (h - PAD.t - PAD.b) / 2, half = (h - PAD.t - PAD.b) / 2 - 2;
-  var a = perYear(lyn, lynShown), b = perYear(mon, monShown);
+  var a = perYear(lyn, lynShown), b = perYear(mon, dedShown);
   var maxA = Math.max(1, Math.max.apply(null, Object.values(a).concat([1])));
   // Dedications and removals stack above the axis on one scale.
   var g = removedPerYear(), up = {};

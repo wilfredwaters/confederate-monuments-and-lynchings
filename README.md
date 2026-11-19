@@ -11,3 +11,10 @@ lynchings have more Confederate monuments. The finding is correlational.
 Sources: Seguin & Rigby (2019) national lynching data; Tolnay–Beck
 inventory (CSDE, University of Washington); SPLC "Whose Heritage?";
 US Census 2023 Gazetteer.
+
+## Tests
+
+Serve the repo root (`python3 -m http.server`) and open
+`/tests/run.html`; it runs the real page and prints PASS or the
+failures. `tests/legend_toggles.js` checks that each legend switch works
+on its own.

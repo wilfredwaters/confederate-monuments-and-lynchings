@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Monuments and Lynchings: tests</title>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="../data.js"></script>
+</head>
+<body>
+<pre id="result">running...</pre>
+<script>
+// Test harness: record every layer group the page creates, then run the
+// real page (body and script from ../index.html) unchanged.
+// Serve the repo root and open /tests/run.html.
+window.__groups = [];
+var makeGroup = L.layerGroup;
+L.layerGroup = function(){ var g = makeGroup.apply(this, arguments); window.__groups.push(g); return g; };
+
+fetch('../index.html', {cache:'no-store'}).then(function(r){ return r.text(); }).then(function(html){
+  var doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('style').forEach(function(s){ document.head.appendChild(s.cloneNode(true)); });
+  var css = document.createElement('link'); css.rel = 'stylesheet';
+  css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+  Array.prototype.forEach.call(doc.body.children, function(n){ if(n.tagName !== 'SCRIPT'){ document.body.appendChild(n.cloneNode(true)); } });
+  var code = doc.querySelectorAll('script:not([src])');
+  (0, eval)(code[code.length - 1].textContent);
+
+  // The page creates the victim group first, then the monument group.
+  window.__ml = {lynGroup: window.__groups[0], monGroup: window.__groups[1]};
+  var s = document.createElement('script'); s.src = 'legend_toggles.js';
+  document.body.appendChild(s);
+});
+</script>
+</body>
+</html>
