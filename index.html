@@ -60,7 +60,7 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
   <div class="k" title="Click to show or hide">
     <button data-k="lyn" aria-pressed="true"><i class="dot"></i>Lynching victim</button>
     <button data-k="mon" aria-pressed="true"><i class="tri"></i>Confederate monument</button>
-    <button data-k="gone" aria-pressed="true"><b style="color:#9a9a9a">&#9651;</b> Removed</button>
+    <button data-k="gone" aria-pressed="true"><b style="color:#1f6fd1">&#9651;</b> Removed</button>
   </div>
   <div id="filters">
     <select id="fSym" aria-label="Confederate symbols shown">
@@ -105,7 +105,7 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
   <h3>How to read it</h3>
   <ul>
     <li>Everything up to the chosen year is shown. The last 10 years are bright; older items fade.</li>
-    <li>A hollow gray triangle is a monument that has since been removed (hollow from its removal year).</li>
+    <li>A white triangle with a blue outline is a monument removed or relocated, shown from its removal year. Most came down in 2017, after the Charlottesville rally, and in 2020, after the murder of George Floyd. Blue bars on the chart count removals per year.</li>
     <li>Outside the 10 Tolnay&ndash;Beck states, victims are placed near the center of their county, a few miles apart, because the records give the county, not the exact spot. Inside them, DUSLR locates most victims to the town.</li>
     <li>Click any mark for details. Accusations are those reported at the time; most were never tested in court.</li>
   </ul>
@@ -143,7 +143,7 @@ var PLAY_MS = 220;        // per year while playing
 // Map marks stay the same in dark mode (the base map is always light);
 // chart bars follow the theme. Bright red vs near-black: far apart in
 // both hue and lightness.
-var COL = {lyn:'#e41a1c', mon:'#111', gone:'#8a8a8a', monBar:getVar('--mon')};
+var COL = {lyn:'#e41a1c', mon:'#111', gone:'#1f6fd1', monBar:getVar('--mon')};
 
 // data.js row layouts (see tools/build.py).
 var M = {lat:0, lon:1, year:2, type:3, status:4, name:5, honor:6, city:7, state:8, sponsor:9, removed:10};
@@ -244,8 +244,8 @@ var mon = MON.filter(function(d){ return d[M.year]; }).map(function(d){
 
 var STYLE = {
   lyn:{'new':{fillOpacity:0.9, opacity:0.9}, old:{fillOpacity:0.28, opacity:0.3}},
-  mon:{'new':{fillOpacity:1, opacity:1, color:'#fff', weight:2.6}, old:{fillOpacity:0.6, opacity:0.8, color:'#fff', weight:2.6},
-       gone:{fillOpacity:0, opacity:1, color:COL.gone, weight:1.8}}
+  mon:{'new':{fillOpacity:1, fillColor:COL.mon, opacity:1, color:'#fff', weight:2.6}, old:{fillOpacity:0.6, fillColor:COL.mon, opacity:0.8, color:'#fff', weight:2.6},
+       gone:{fillOpacity:1, fillColor:'#fff', opacity:1, color:COL.gone, weight:2.8}}
 };
 
 // lyn, mon, gone: legend switches (true = shown).
@@ -296,7 +296,8 @@ function setYear(Y){
   apply(lyn, lynGroup, 'lyn', lynShown, year);
   apply(mon, monGroup, 'mon', monShown, year);
   $('count').textContent = 'By '+year+': '+cumCount(lyn, lynShown, year).toLocaleString()+' lynching victims recorded · '
-    + cumCount(mon, monShown, year).toLocaleString()+' '+(filt.sym === 'M' ? 'monuments' : 'symbols')+' dedicated';
+    + cumCount(mon, monShown, year).toLocaleString()+' '+(filt.sym === 'M' ? 'monuments' : 'symbols')+' dedicated'
+    + (filt.gone ? ' \u00b7 '+goneCount(year).toLocaleString()+' removed' : '');
   cursor();
 }
 
@@ -332,6 +333,20 @@ function el(tag, a, parent){
   return e;
 }
 
+function goneCount(Y){
+  var n = 0;
+  mon.forEach(function(it){ if(monShown(it) && it.gone && it.gone <= Y){ n++; } });
+  return n;
+}
+
+// Removals per year, for monuments shown.
+function removedPerYear(){
+  var c = {};
+  if(!filt.gone){ return c; }
+  mon.forEach(function(it){ if(monShown(it) && it.gone){ c[it.gone] = (c[it.gone] || 0) + 1; } });
+  return c;
+}
+
 function perYear(items, shown){
   var c = {};
   items.forEach(function(it){ if(shown(it)){ c[it.y] = (c[it.y] || 0) + 1; } });
@@ -348,12 +363,18 @@ function drawChart(){
   var mid = PAD.t + (h - PAD.t - PAD.b) / 2, half = (h - PAD.t - PAD.b) / 2 - 2;
   var a = perYear(lyn, lynShown), b = perYear(mon, monShown);
   var maxA = Math.max(1, Math.max.apply(null, Object.values(a).concat([1])));
-  var maxB = Math.max(1, Math.max.apply(null, Object.values(b).concat([1])));
+  // Dedications and removals stack above the axis on one scale.
+  var g = removedPerYear(), up = {};
+  for(var k in b){ up[k] = b[k]; }
+  for(var k2 in g){ up[k2] = (up[k2] || 0) + g[k2]; }
+  var maxB = Math.max(1, Math.max.apply(null, Object.values(up).concat([1])));
   var bw = Math.max(1, (w - PAD.l - PAD.r) / (YEAR_MAX - YEAR_MIN + 1) - 0.6);
 
   for(var Y = YEAR_MIN; Y <= YEAR_MAX; Y++){
     var x = xOf(Y, w);
-    if(b[Y]){ el('rect', {x:x, y:mid - b[Y] / maxB * half, width:bw, height:b[Y] / maxB * half, fill:COL.monBar}); }
+    var hb = (b[Y] || 0) / maxB * half, hg = (g[Y] || 0) / maxB * half;
+    if(hb){ el('rect', {x:x, y:mid - hb, width:bw, height:hb, fill:COL.monBar}); }
+    if(hg){ el('rect', {x:x, y:mid - hb - hg, width:bw, height:hg, fill:COL.gone}); }
     if(a[Y]){ el('rect', {x:x, y:mid + 1, width:bw, height:a[Y] / maxA * half, fill:COL.lyn}); }
   }
 
@@ -364,7 +385,7 @@ function drawChart(){
     var t = el('text', {x:xOf(D, w), y:h - 2, 'font-size':10, fill:fg, 'text-anchor':'middle'});
     t.textContent = D % 50 === 0 || w > 700 ? D : '';
   }
-  lab(4, PAD.t + 8, 'Dedicated', COL.monBar); lab(4, PAD.t + 19, 'max '+maxB+'/yr', fg);
+  lab(4, PAD.t + 8, 'Dedicated', COL.monBar); lab(4, PAD.t + 19, 'Removed', COL.gone); lab(4, PAD.t + 30, 'max '+maxB+'/yr', fg);
   lab(4, h - PAD.b - 12, 'Lynched', COL.lyn); lab(4, h - PAD.b - 1, 'max '+maxA+'/yr', fg);
 
   cur = el('line', {y1:PAD.t - 4, y2:h - PAD.b, stroke:getVar('--fg'), 'stroke-width':1.5});
