@@ -34,6 +34,9 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
 #about h2{font:700 20px Georgia,serif;margin:0 0 8px}#about h3{font-size:15px;margin:16px 0 4px}
 .leaflet-popup-content{font-size:13px}
 .lbl{color:var(--muted)}
+.st-lbl span{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;font:700 13px -apple-system,"Segoe UI",Arial,sans-serif;letter-spacing:.04em;color:#222;
+  text-shadow:-2px 0 #fff,2px 0 #fff,0 -2px #fff,0 2px #fff,-1px -1px #fff,1px 1px #fff,-1px 1px #fff,1px -1px #fff;pointer-events:none}
+.st-lbl .nm{display:none}.st-full .st-lbl .nm{display:inline}.st-full .st-lbl .ab{display:none}
 @media (max-width:700px){
   #map{bottom:230px}#panel{height:230px;padding:6px 16px}
   #title{left:10px;top:auto;bottom:240px;max-width:calc(100vw - 20px)}
@@ -150,6 +153,23 @@ var map = L.map('map', {preferCanvas:true, minZoom:3}).setView([34.5, -88], 5);
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom:16,
   attribution:'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'}).addTo(map);
 var canvas = L.canvas({padding:0.3});
+
+// State outlines under the marks, names above them; neither takes the
+// mouse. Abbreviations when zoomed out, full names from STATE_FULL_ZOOM.
+var STATE_FULL_ZOOM = 6;
+map.createPane('states').style.zIndex = 350;
+map.createPane('stateLabels').style.zIndex = 450;
+map.getPane('states').style.pointerEvents = 'none';
+map.getPane('stateLabels').style.pointerEvents = 'none';
+L.geoJson(STATES, {pane:'states', interactive:false,
+  style:{color:'#3c3c44', weight:1.6, opacity:0.85, fill:false}}).addTo(map);
+STATE_LABELS.forEach(function(s){
+  var icon = L.divIcon({className:'st-lbl', iconSize:null,
+    html:'<span><b class="ab">'+s[0]+'</b><b class="nm">'+esc(s[1])+'</b></span>'});
+  L.marker([s[2], s[3]], {icon:icon, pane:'stateLabels', interactive:false, keyboard:false}).addTo(map);
+});
+function stateZoom(){ map.getContainer().classList.toggle('st-full', map.getZoom() >= STATE_FULL_ZOOM); }
+map.on('zoomend', stateZoom); stateZoom();
 
 // Triangles on the canvas renderer: a circle marker drawn as a triangle,
 // so monuments read differently from victims without extra DOM nodes.

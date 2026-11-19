@@ -13,6 +13,13 @@ Inputs (in data/, git-ignored):
       white victims, 1865-1921, geocoded to town. No license stated.
   2023_Gaz_counties_national.txt   Census county centroids, from
       https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2023_Gazetteer/
+  states.geojson, labels.geojson   state outlines and label points, from
+      Census cb_2023_us_state_20m (GENZ2023):
+        ogr2ogr -f GeoJSON -lco COORDINATE_PRECISION=3 -simplify 0.01 \
+          states.geojson cb_2023_us_state_20m.shp -select STUSPS,NAME
+        ogr2ogr -f GeoJSON -lco COORDINATE_PRECISION=3 -dialect SQLite \
+          -sql "SELECT STUSPS, NAME, ST_PointOnSurface(geometry) AS geometry
+                FROM cb_2023_us_state_20m" labels.geojson cb_2023_us_state_20m.shp
 
 Usage:
   python3 tools/build.py
@@ -37,6 +44,12 @@ SR = os.path.join(DATA, 'seguin_rigby_2019.csv')
 TB = os.path.join(DATA, 'tolnay_beck.csv')
 DUSLR = os.path.join(DATA, 'duslr_subset.csv')
 GAZ = os.path.join(DATA, '2023_Gaz_counties_national.txt')
+STATES = os.path.join(DATA, 'states.geojson')
+LABELS = os.path.join(DATA, 'labels.geojson')
+
+# Label points that read better than the computed point on surface.
+LABEL_AT = {'FL': (28.3, -81.7), 'LA': (31.0, -92.3), 'MI': (43.4, -84.6),
+            'KY': (37.6, -85.0), 'VA': (37.5, -78.6), 'MD': (39.1, -76.9)}
 
 # Offset victims up to this far from the county centroid (km), so cases
 # in one county don't stack on one dot.
@@ -246,6 +259,20 @@ def inside(b, pt):
     return b[0] <= pt[0] <= b[2] and b[1] <= pt[1] <= b[3]
 
 
+def states():
+    """State outlines and [abbr, name, lat, lon] labels."""
+    geo = json.load(open(STATES))
+    for f in geo['features']:
+        f['properties'] = {'s': f['properties']['STUSPS']}
+    labels = []
+    for f in json.load(open(LABELS))['features']:
+        p = f['properties']
+        lon, lat = f['geometry']['coordinates']
+        lat, lon = LABEL_AT.get(p['STUSPS'], (lat, lon))
+        labels.append([p['STUSPS'], p['NAME'], round(lat, 2), round(lon, 2)])
+    return geo, labels
+
+
 def main():
     mon = symbols()
     cent = centroids()
@@ -262,6 +289,9 @@ def main():
         out.write('var MON=' + json.dumps(mon, separators=sep) + ';\n')
         out.write('var LYN=' + json.dumps(lyn, separators=sep) + ';\n')
         out.write('var META=' + json.dumps(meta, separators=sep) + ';\n')
+        geo, labels = states()
+        out.write('var STATES=' + json.dumps(geo, separators=sep) + ';\n')
+        out.write('var STATE_LABELS=' + json.dumps(labels, separators=sep) + ';\n')
 
     print(meta)
     for m in missing[:20]:
