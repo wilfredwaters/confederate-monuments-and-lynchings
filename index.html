@@ -23,7 +23,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.
 button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border-radius:6px;background:#fff;color:var(--fg);cursor:pointer}
 #title{position:absolute;top:10px;left:56px;z-index:500;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;max-width:min(420px,calc(100vw - 90px));box-shadow:0 1px 6px rgba(0,0,0,.15)}
 #title h1{font:700 17px/1.2 Georgia,serif;margin:0 0 4px}
-#title .k{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:4px 0}
+#title .k{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:4px 0}
+/* Legend entries double as layer switches. */
+#title .k button{font:12px sans-serif;padding:3px 7px;border:1px solid var(--line);border-radius:5px;background:transparent;color:var(--fg)}
+#title .k button[aria-pressed="false"]{opacity:.4;text-decoration:line-through}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--lyn);margin-right:4px;vertical-align:middle}
 .tri{display:inline-block;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid var(--mon);filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff);margin-right:4px;vertical-align:middle}
 .hol{display:inline-block;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #aaa;margin-right:4px;vertical-align:middle}
@@ -54,7 +57,11 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
 
 <div id="title">
   <h1>Monuments and Lynchings</h1>
-  <div class="k"><span><i class="dot"></i>Lynching victim</span><span><i class="tri"></i>Confederate monument</span><span><b style="color:#9a9a9a">&#9651;</b> Removed</span></div>
+  <div class="k" title="Click to show or hide">
+    <button data-k="lyn" aria-pressed="true"><i class="dot"></i>Lynching victim</button>
+    <button data-k="mon" aria-pressed="true"><i class="tri"></i>Confederate monument</button>
+    <button data-k="gone" aria-pressed="true"><b style="color:#9a9a9a">&#9651;</b> Removed</button>
+  </div>
   <div id="filters">
     <select id="fSym" aria-label="Confederate symbols shown">
       <option value="M">Monuments only</option>
@@ -241,16 +248,17 @@ var STYLE = {
        gone:{fillOpacity:0, opacity:1, color:COL.gone, weight:1.8}}
 };
 
-var filt = {sym:'M', race:'all', mode:'cum'};
+// lyn, mon, gone: legend switches (true = shown).
+var filt = {sym:'M', race:'all', mode:'cum', lyn:true, mon:true, gone:true};
 
-function lynShown(it){ return filt.race === 'all' || it.race === filt.race; }
-function monShown(it){ return filt.sym === 'all' || it.type === 'M'; }
+function lynShown(it){ return filt.lyn && (filt.race === 'all' || it.race === filt.race); }
+function monShown(it){ return filt.mon && (filt.sym === 'all' || it.type === 'M'); }
 
 // State of one item at year Y: hidden before it happens; bright for
 // BRIGHT years; faded after (or hidden, in window mode); gray once removed.
 function stateAt(it, Y, kind){
   if(it.y > Y){ return ''; }
-  if(kind === 'mon' && it.gone && it.gone <= Y){ return 'gone'; }
+  if(kind === 'mon' && it.gone && it.gone <= Y){ return filt.gone ? 'gone' : ''; }
   if(Y - it.y < BRIGHT){ return 'new'; }
   return filt.mode === 'win' ? '' : 'old';
 }
@@ -388,6 +396,14 @@ function refilter(){
   drawChart(); setYear(year);
 }
 ['fSym', 'fRace', 'fMode'].forEach(function(id){ $(id).onchange = refilter; });
+Array.prototype.forEach.call(document.querySelectorAll('#title .k button'), function(b){
+  b.onclick = function(){
+    var k = b.getAttribute('data-k');
+    filt[k] = !filt[k];
+    b.setAttribute('aria-pressed', filt[k]);
+    drawChart(); setYear(year);
+  };
+});
 
 $('aboutBtn').onclick = function(){ $('about').style.display = 'flex'; };
 $('closeAbout').onclick = function(){ $('about').style.display = 'none'; };
