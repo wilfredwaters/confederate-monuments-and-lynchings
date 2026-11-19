@@ -6,7 +6,7 @@ Inputs (in data/, git-ignored):
   seguin_rigby_2019.csv      Seguin & Rigby (2019) national lynching data,
       38 states outside the Tolnay-Beck South, https://osf.io/kr8yc
   tolnay_beck.csv            optional; Tolnay-Beck inventory (10 Southern
-      states), from https://sites.uw.edu/lynching/ after registering
+      states), requested via the contact form at https://sites.uw.edu/lynching/
   2023_Gaz_counties_national.txt   Census county centroids, from
       https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2023_Gazetteer/
 
