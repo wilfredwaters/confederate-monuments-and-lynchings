@@ -1,7 +1,6 @@
-// Browser test for the legend switches, loaded by tests/run.html.
-// Writes PASS or the failures into #result.
+// Browser test for the legend switches, run by tests/run.html.
 // Each switch must work on its own, whatever the others are set to.
-(async function(){
+window.__tests.push({name:'legend switches', run:async function(){
   var wait = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
   var btn = function(k){ return document.querySelector('#title .k [data-k="'+k+'"]'); };
   var on = function(k){ return btn(k).getAttribute('aria-pressed') === 'true'; };
@@ -34,7 +33,5 @@
   if(goneShown() !== 0){ fails.push('removed shown with Monuments on, Removed off'); }
 
   await set('gone', true); await set('lyn', true);
-  var out = fails.length ? 'FAIL\n' + fails.join('\n') : 'PASS';
-  document.getElementById('result').textContent = out;
-  return out;
-})();
+  return fails;
+}});

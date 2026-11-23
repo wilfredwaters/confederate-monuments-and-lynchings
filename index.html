@@ -162,10 +162,10 @@ function $(id){ return document.getElementById(id); }
 var map = L.map('map', {preferCanvas:true, minZoom:3}).setView([34.5, -88], 5);
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom:16,
   attribution:'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'}).addTo(map);
-// Separate panes and canvases so monuments always draw above victims.
-map.createPane('lyn').style.zIndex = 410;
-map.createPane('mon').style.zIndex = 420;
-var lynCanvas = L.canvas({padding:0.3, pane:'lyn'}), monCanvas = L.canvas({padding:0.3, pane:'mon'});
+// One canvas for all marks. A second canvas above it would take every
+// mouse event and leave the marks below unclickable; monuments stay on
+// top because they are drawn last (see setYear).
+var canvas = L.canvas({padding:0.3});
 
 // State outlines under the marks, names above them; neither takes the
 // mouse. Abbreviations when zoomed out, full names from STATE_FULL_ZOOM.
@@ -231,13 +231,13 @@ function raceKey(r){
 }
 
 var lyn = LYN.map(function(d){
-  var l = L.circleMarker([d[V.lat], d[V.lon]], {renderer:lynCanvas, pane:'lyn', radius:4, weight:0.6, color:'#fff', fillColor:COL.lyn});
+  var l = L.circleMarker([d[V.lat], d[V.lon]], {renderer:canvas, radius:4, weight:0.6, color:'#fff', fillColor:COL.lyn});
   l.bindPopup(function(){ return lynHtml(d); }, {maxWidth:280});
   return {d:d, y:d[V.year], race:raceKey(d[V.race]), layer:l, state:''};
 });
 
 var mon = MON.filter(function(d){ return d[M.year]; }).map(function(d){
-  var l = new Triangle([d[M.lat], d[M.lon]], {renderer:monCanvas, pane:'mon', radius:6, weight:2.6, color:'#fff', fillColor:COL.mon});
+  var l = new Triangle([d[M.lat], d[M.lon]], {renderer:canvas, radius:6, weight:2.6, color:'#fff', fillColor:COL.mon});
   l.bindPopup(function(){ return monHtml(d); }, {maxWidth:280});
   return {d:d, y:d[M.year], gone:d[M.removed], type:d[M.type], layer:l, state:''};
 });
@@ -267,20 +267,20 @@ function stateAt(it, Y, kind){
   return filt.mode === 'win' ? '' : 'old';
 }
 
+// Show, restyle or hide each item for year Y; returns how many were added.
 function apply(items, group, kind, shown, Y){
-  var n = 0;
+  var added = 0;
   items.forEach(function(it){
     var s = shown(it) ? stateAt(it, Y, kind) : '';
-    if(s){ n++; }
     if(s === it.state){ return; }
     if(!s){ group.removeLayer(it.layer); }
     else {
       it.layer.setStyle(STYLE[kind][s]);
-      if(!it.state){ group.addLayer(it.layer); }
+      if(!it.state){ group.addLayer(it.layer); added++; }
     }
     it.state = s;
   });
-  return n;
+  return added;
 }
 
 function cumCount(items, shown, Y){
@@ -297,8 +297,12 @@ function setYear(Y){
   year = Math.max(YEAR_MIN, Math.min(YEAR_MAX, Y));
   $('yr').textContent = year;
   $('slider').value = year;
-  apply(lyn, lynGroup, 'lyn', lynShown, year);
+  var newVictims = apply(lyn, lynGroup, 'lyn', lynShown, year);
   apply(mon, monGroup, 'mon', monShown, year);
+
+  // Newly added victims draw last on the shared canvas; redraw monuments
+  // after them so monuments stay on top.
+  if(newVictims){ monGroup.eachLayer(function(l){ l.bringToFront(); }); }
   $('count').textContent = 'By '+year+': '+cumCount(lyn, lynShown, year).toLocaleString()+' lynching victims recorded · '
     + cumCount(mon, dedShown, year).toLocaleString()+' '+(filt.sym === 'M' ? 'monuments' : 'symbols')+' dedicated'
     + (filt.gone ? ' \u00b7 '+goneCount(year).toLocaleString()+' removed' : '');

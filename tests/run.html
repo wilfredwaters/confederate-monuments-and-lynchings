@@ -27,9 +27,31 @@ fetch('../index.html', {cache:'no-store'}).then(function(r){ return r.text(); })
 
   // The page creates the victim group first, then the monument group.
   window.__ml = {lynGroup: window.__groups[0], monGroup: window.__groups[1]};
-  var s = document.createElement('script'); s.src = 'legend_toggles.js';
-  document.body.appendChild(s);
-});
+  return loadTests(TESTS);
+}).then(runTests);
+
+// Each test file pushes {name, run} onto window.__tests; run() resolves
+// to an array of failure messages (empty = pass).
+var TESTS = ['legend_toggles.js', 'click_popups.js'];
+window.__tests = [];
+
+function loadTests(files){
+  return files.reduce(function(p, f){
+    return p.then(function(){ return new Promise(function(ok){
+      var s = document.createElement('script'); s.src = f; s.onload = ok; document.body.appendChild(s);
+    }); });
+  }, Promise.resolve());
+}
+
+async function runTests(){
+  var lines = [], failed = 0;
+  for(var t of window.__tests){
+    var fails = await t.run();
+    failed += fails.length ? 1 : 0;
+    lines.push((fails.length ? 'FAIL ' : 'PASS ') + t.name + (fails.length ? '\n  ' + fails.join('\n  ') : ''));
+  }
+  document.getElementById('result').textContent = (failed ? 'FAIL' : 'PASS') + '\n' + lines.join('\n');
+}
 </script>
 </body>
 </html>
