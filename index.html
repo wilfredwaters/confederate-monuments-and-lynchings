@@ -31,6 +31,12 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
 .tri{display:inline-block;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid var(--mon);filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff);margin-right:4px;vertical-align:middle}
 .hol{display:inline-block;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #aaa;margin-right:4px;vertical-align:middle}
 #filters{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+#search{position:relative;margin-top:6px}
+#q{width:100%;box-sizing:border-box;font:13px sans-serif;padding:6px 8px;border:1px solid #888;border-radius:6px;background:var(--bg);color:var(--fg)}
+#hits{position:absolute;left:0;right:0;top:100%;margin-top:2px;max-height:45vh;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.2);z-index:600}
+#hits button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:6px 8px;background:transparent}
+#hits button:hover,#hits button:focus{background:rgba(0,0,0,.06)}
+#hits .hd{font:600 11px sans-serif;color:var(--muted);padding:6px 8px 2px;text-transform:uppercase;letter-spacing:.04em}
 #warn{position:absolute;top:10px;right:10px;z-index:500;max-width:300px;background:var(--warn);border:1px solid var(--warn-line);border-radius:8px;padding:8px 10px;font-size:12px}
 #about{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:16px}
 #about .box{background:var(--bg);color:var(--fg);max-width:680px;max-height:85vh;overflow:auto;border-radius:10px;padding:18px 22px;box-shadow:0 4px 24px rgba(0,0,0,.3)}
@@ -79,6 +85,10 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
     </select>
     <button id="aboutBtn">About</button>
   </div>
+  <form id="search" role="search" autocomplete="off">
+    <input id="q" type="search" placeholder="Search a monument, victim, town or address" aria-label="Search">
+    <div id="hits" hidden></div>
+  </form>
 </div>
 
 <div id="warn" hidden></div>
@@ -115,6 +125,7 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
     <li><b>Lynchings, 38 states (1883&ndash;1941):</b> Charles Seguin and David Rigby, "National Crimes: A New National Data Set of Lynchings in the United States, 1883 to 1941," <i>Socius</i> 2019. <a href="https://osf.io/kr8yc" target="_blank" rel="noopener">osf.io/kr8yc</a></li>
     <li><b>Lynchings, 10 Southern states (1882&ndash;1930):</b> Tolnay&ndash;Beck inventory, Center for Studies in Demography and Ecology, University of Washington. <a href="https://sites.uw.edu/lynching/" target="_blank" rel="noopener">sites.uw.edu/lynching</a> <span id="tbNote"></span></li>
     <li><b>Confederate symbols:</b> Southern Poverty Law Center, <a href="https://www.splcenter.org/resources/reports/whose-heritage-public-symbols-confederacy-third-edition/" target="_blank" rel="noopener">Whose Heritage? Public Symbols of the Confederacy</a>. Dedication year is missing for some symbols; those are left off the timeline (<span id="undated"></span>).</li>
+    <li><b>Place search:</b> <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a>, &copy; OpenStreetMap contributors. Your search text is sent to it.</li>
     <li><b>County centers:</b> US Census Bureau 2023 Gazetteer. Base map: Esri World Light Gray Canvas (Esri, HERE, Garmin, &copy; OpenStreetMap contributors).</li>
   </ul>
   <p>Inspired by <a href="https://monroeworktoday.org/" target="_blank" rel="noopener">Monroe Work Today</a>, which maps a larger lynching record (1835&ndash;1964). Its full data is not public, so it is not used here.</p>
@@ -454,6 +465,119 @@ if(META.tb === 'duslr'){
     + ' only named Black and white victims from 1865 to 1921 are shown. Unnamed victims, other victims and 1922\u20131930 are missing there.';
   $('tbNote').innerHTML = 'Shown here through the <a href="https://github.com/MatthewKollmer/DUSLR" target="_blank" rel="noopener">DUSLR</a> subset compiled by Matthew Kollmer (Virality of Racial Terror project): named Black and white victims, 1865&ndash;1921, located to the town.';
 }
+
+// --- Basemaps -------------------------------------------------------
+
+var ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+var BASE = {
+  'Light gray': null,  // the layer added at startup
+  'Streets': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}),
+  'Satellite': L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:19,
+    attribution:'Tiles &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics, and the GIS User Community'}),
+  'Topographic': L.tileLayer(ESRI + 'World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19,
+    attribution:'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, USGS, &copy; OpenStreetMap contributors'})
+};
+map.eachLayer(function(l){ if(l instanceof L.TileLayer){ BASE['Light gray'] = l; } });
+L.control.layers(BASE, null, {position:'bottomleft', collapsed:true}).addTo(map);
+
+// --- Search ---------------------------------------------------------
+// Typing searches the app's own monuments and victims. Enter (or the
+// "Find place" row) asks Nominatim for an address or town, once per
+// submit, as its usage policy requires.
+
+var NOMINATIM = 'https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=us&limit=5&q=';
+var MAX_HITS = 8, MIN_CHARS = 2, ITEM_ZOOM = 10, PLACE_ZOOM = 12;
+
+function norm(t){ return String(t || '').toLowerCase(); }
+mon.forEach(function(it){ var d = it.d; it.text = norm([d[M.name], d[M.honor], d[M.city], d[M.state]].join(' ')); });
+lyn.forEach(function(it){ var d = it.d; it.text = norm([d[V.name], d[V.city], d[V.county], d[V.state]].join(' ')); });
+
+function matches(items, words){
+  var out = [];
+  for(var i = 0; i < items.length && out.length < MAX_HITS; i++){
+    var t = items[i].text;
+    if(words.every(function(w){ return t.indexOf(w) >= 0; })){ out.push(items[i]); }
+  }
+  return out;
+}
+
+function hitButton(label, onPick){
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.innerHTML = label;
+  b.onclick = function(){ $('hits').hidden = true; onPick(); };
+  return b;
+}
+
+function header(text){ var h = document.createElement('div'); h.className = 'hd'; h.textContent = text; return h; }
+
+function showLocal(){
+  var q = $('q').value.trim(), box = $('hits');
+  box.innerHTML = '';
+  if(q.length < MIN_CHARS){ box.hidden = true; return; }
+
+  var words = norm(q).split(/\s+/);
+  var ms = matches(mon, words), vs = matches(lyn, words);
+  if(ms.length){
+    box.appendChild(header('Monuments'));
+    ms.forEach(function(it){ box.appendChild(hitButton('<b>'+esc(it.d[M.name])+'</b> &middot; '+esc([it.d[M.city], it.d[M.state]].filter(Boolean).join(', '))+' &middot; '+it.y, function(){ goItem(it, 'mon'); })); });
+  }
+  if(vs.length){
+    box.appendChild(header('Lynching victims'));
+    vs.forEach(function(it){ box.appendChild(hitButton('<b>'+esc(it.d[V.name] || 'Name not recorded')+'</b> &middot; '+esc([it.d[V.county], it.d[V.state]].filter(Boolean).join(', '))+' &middot; '+it.y, function(){ goItem(it, 'lyn'); })); });
+  }
+  box.appendChild(hitButton('Find place &ldquo;'+esc(q)+'&rdquo; (address or town)', findPlace));
+  box.hidden = false;
+}
+
+// Show one item: make sure no filter hides it, move the timeline to its
+// year, then zoom to it and open its popup.
+function goItem(it, kind){
+  stop();
+  if(kind === 'mon'){
+    if(!monShown(it)){ $('fSym').value = 'all'; }
+    setSwitch('mon', true);
+  } else {
+    if(!lynShown(it)){ $('fRace').value = 'all'; }
+    setSwitch('lyn', true);
+  }
+  refilter();
+  setYear(it.y);
+  map.setView(it.layer.getLatLng(), Math.max(map.getZoom(), ITEM_ZOOM));
+  it.layer.openPopup();
+}
+
+function setSwitch(k, v){
+  filt[k] = v;
+  document.querySelector('#title .k [data-k="'+k+'"]').setAttribute('aria-pressed', v);
+}
+
+function findPlace(){
+  var q = $('q').value.trim(), box = $('hits');
+  if(!q){ return; }
+  box.innerHTML = '<div class="hd">Searching places&hellip;</div>';
+  box.hidden = false;
+  fetch(NOMINATIM + encodeURIComponent(q), {headers:{'Accept-Language':'en'}})
+    .then(function(r){ return r.json(); })
+    .then(function(rs){
+      box.innerHTML = '';
+      box.appendChild(header('Places'));
+      if(!rs.length){ box.appendChild(header('No place found')); return; }
+      rs.forEach(function(r){
+        box.appendChild(hitButton(esc(r.display_name), function(){
+          map.setView([+r.lat, +r.lon], PLACE_ZOOM);
+        }));
+      });
+    })
+    .catch(function(){ box.innerHTML = '<div class="hd">Place search unavailable</div>'; });
+}
+
+$('q').addEventListener('input', showLocal);
+$('search').addEventListener('submit', function(e){ e.preventDefault(); findPlace(); });
+document.addEventListener('click', function(e){ if(!$('search').contains(e.target)){ $('hits').hidden = true; } });
+L.DomEvent.disableClickPropagation($('title'));
+L.DomEvent.disableScrollPropagation($('title'));
 
 drawChart();
 setYear(START);

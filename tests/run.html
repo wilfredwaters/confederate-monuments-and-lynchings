@@ -32,7 +32,7 @@ fetch('../index.html', {cache:'no-store'}).then(function(r){ return r.text(); })
 
 // Each test file pushes {name, run} onto window.__tests; run() resolves
 // to an array of failure messages (empty = pass).
-var TESTS = ['legend_toggles.js', 'click_popups.js'];
+var TESTS = ['legend_toggles.js', 'click_popups.js', 'search.js'];
 window.__tests = [];
 
 function loadTests(files){
