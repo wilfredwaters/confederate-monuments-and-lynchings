@@ -46,10 +46,21 @@ button,select{font:13px sans-serif;padding:5px 10px;border:1px solid #888;border
 .st-lbl span{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;font:700 13px -apple-system,"Segoe UI",Arial,sans-serif;letter-spacing:.04em;color:#222;
   text-shadow:-2px 0 #fff,2px 0 #fff,0 -2px #fff,0 2px #fff,-1px -1px #fff,1px 1px #fff,-1px 1px #fff,1px -1px #fff;pointer-events:none}
 .st-lbl .nm{display:none}.st-full .st-lbl .nm{display:inline}.st-full .st-lbl .ab{display:none}
+/* Phone: map and timeline stay pinned at the top; legend, filters,
+   search and the data note scroll underneath, off the map. */
 @media (max-width:700px){
-  #map{bottom:230px}#panel{height:230px;padding:6px 16px}
-  #title{left:10px;top:auto;bottom:240px;max-width:calc(100vw - 20px)}
-  #warn{top:10px;left:56px;right:10px;max-width:none}
+  html,body{height:auto}
+  body{display:flex;flex-direction:column}
+  #map{position:sticky;top:0;bottom:auto;height:40vh;height:40svh;flex:none;order:1;z-index:1100}
+  #panel{position:sticky;top:40vh;top:40svh;height:192px;flex:none;order:2;z-index:1100;background:var(--bg);padding:6px 16px;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+  #yr{font-size:22px;min-width:52px}
+  #count{font-size:12px;line-height:1.3}
+  #chart{min-height:0}
+  #title{position:static;order:3;max-width:none;border:0;border-radius:0;box-shadow:none;background:var(--bg);padding:12px 16px}
+  #warn{position:static;order:4;max-width:none;margin:0 16px 24px}
+  #title .k button,#filters select,#filters button,#play{min-height:36px}
+  #q{font-size:16px;padding:8px}
+  #about{z-index:2000}
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){--bg:#17181b;--fg:#e8e8ea;--muted:#a0a3a8;--line:#3a3b40;--panel:rgba(23,24,27,.95);--mon:#d6d6de;--warn:#3a3218;--warn-line:#8a7330}
@@ -428,6 +439,8 @@ function pick(e){
 svg.addEventListener('pointerdown', function(e){ svg.setPointerCapture(e.pointerId); pick(e);
   svg.onpointermove = pick; svg.onpointerup = function(){ svg.onpointermove = null; }; });
 window.addEventListener('resize', drawChart);
+// The phone layout settles after first paint; redraw when the chart resizes.
+if(window.ResizeObserver){ new ResizeObserver(drawChart).observe(svg); }
 
 // --- Filters, About, warning ----------------------------------------
 
